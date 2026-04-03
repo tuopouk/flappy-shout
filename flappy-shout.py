@@ -7,21 +7,21 @@ import random
 # 1. APP INITIALIZATION & MOBILE SCALING
 # ==========================================
 # CRITICAL: The viewport meta tag prevents mobile browsers from zooming out,
-# forcing the game to scale correctly on phone screens.
+# forcing the game to scale correctly on smartphone screens.
 app = Dash(__name__, suppress_callback_exceptions=True, meta_tags=[
     {"name": "viewport", "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"}
 ])
-server = app.server # Expose the Flask server for Heroku / Gunicorn
+server = app.server # Expose the Flask server for Heroku's Gunicorn
 
 # ==========================================
-# 2. GAME SETTINGS (Optimized for Cloud Deployment)
+# 2. GAME SETTINGS (Ultra-Stable Cloud Version)
 # ==========================================
-# Because we reduced the server update rate to 10 FPS (to prevent mobile network jams),
-# the physics values are scaled up to match the slower tick rate.
-GRAVITY = 1.8         # Stronger gravity per frame
-JUMP_STRENGTH = -15   # Stronger jump impulse
-PIPE_SPEED = 10       # Pipes move in larger increments
-HOLE_SIZE = 180       # The vertical gap space between pipes
+# To prevent mobile networks from crashing due to too many requests, 
+# the game updates every 250ms (4 FPS). The physics are scaled up accordingly.
+GRAVITY = 4.5         # Stronger gravity per frame
+JUMP_STRENGTH = -25   # Stronger jump impulse
+PIPE_SPEED = 25       # Pipes move in larger increments
+HOLE_SIZE = 180       # The vertical gap space between top and bottom pipes
 SHOUT_THRESHOLD = 40  # Minimum microphone volume (0-128) to trigger a jump
 
 # ==========================================
@@ -49,7 +49,7 @@ app.layout = html.Div([
 
     # Game Canvas / Board
     html.Div([
-        # WIDTH REDUCED TO 350px: Ensures the board fits on narrow smartphone screens (e.g., iPhone)
+        # WIDTH REDUCED TO 350px: Ensures the board fits on narrow smartphone screens
         html.Div(id='game-board', style={
             'width': '350px', 'height': '400px', 'backgroundColor': '#87CEEB', 
             'position': 'relative', 'overflow': 'hidden', 'margin': '0 auto',
@@ -58,10 +58,10 @@ app.layout = html.Div([
         html.H2(id='score-display', style={'textAlign': 'center'})
     ]),
 
-    # GAME CLOCK: 100ms interval (10 FPS). 
-    # This is the "Golden Ratio" that prevents mobile networks from lagging, 
-    # while still providing enough updates for the CSS animations to smooth out.
-    dcc.Interval(id='game-clock', interval=100, n_intervals=0),
+    # GAME CLOCK: 250ms interval (4 FPS). 
+    # This prevents the mobile network connection from bottlenecking,
+    # ensuring the "blue screen of death" doesn't occur on cellular data.
+    dcc.Interval(id='game-clock', interval=250, n_intervals=0),
     
     # GAME STATE MEMORY
     dcc.Store(id='game-state', data={
@@ -72,6 +72,7 @@ app.layout = html.Div([
         'processed_jump': 0 
     }),
     
+    # Stores the timestamp of the last loud noise
     dcc.Store(id='last-jump-time', data=0)
 ])
 
@@ -113,7 +114,7 @@ def update_game(n, start_clicks, state, last_jump):
     if start_clicks > state.get('start_clicks', 0):
         state = {
             'bird_y': 200, 
-            'velocity': -10, 
+            'velocity': -15, 
             'pipe_x': 400, 
             'pipe_hole_y': random.randint(50, 170), 
             'score': 0, 
@@ -140,16 +141,16 @@ def update_game(n, start_clicks, state, last_jump):
     # --- PHYSICS CALCULATIONS ---
     now = time.time()
     
-    # JUMP WINDOW: Widened to 0.3s to compensate for network ping latency
-    if (now - last_jump < 0.30) and (now - state.get('processed_jump', 0) > 0.4):
+    # JUMP WINDOW: Widened to compensate for mobile network latency
+    if (now - last_jump < 0.50) and (now - state.get('processed_jump', 0) > 0.6):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
         
     state['velocity'] += GRAVITY
     
-    # TERMINAL VELOCITY: Cap falling speed
-    if state['velocity'] > 20:
-        state['velocity'] = 20
+    # TERMINAL VELOCITY: Cap maximum falling speed
+    if state['velocity'] > 35:
+        state['velocity'] = 35
         
     state['bird_y'] += state['velocity']
 
@@ -178,19 +179,19 @@ def update_game(n, start_clicks, state, last_jump):
     # 6. RENDERING & CSS ANIMATION TRICKS
     # ==========================================
     
-    rotation = max(-20, min(90, state['velocity'] * 3))
+    rotation = max(-20, min(90, state['velocity'] * 2))
 
-    # CSS TRICK: Even though the server updates only every 100ms, 
-    # the 'transition: 0.1s linear' property tells the browser's GPU to smoothly 
-    # interpolate the movement between the old and new coordinates.
-    # This makes a 10 FPS server signal look like a smooth 60 FPS animation!
+    # CSS TRICK: The server updates only every 250ms to save bandwidth.
+    # However, the 'transition: 0.25s linear' property commands the browser's GPU 
+    # to smoothly interpolate the movement between frames. This bridges the gap 
+    # and makes the game look surprisingly smooth on the client side!
     
     bird = html.Div(style={
         'position': 'absolute', 'left': f'{bird_x}px', 'top': f"{state['bird_y']}px", 
         'width': f'{bird_size}px', 'height': f'{bird_size}px', 
         'backgroundColor': '#FFD700', 'borderRadius': '50%', 'border': '2px solid black',
         'transform': f'rotate({rotation}deg)', 
-        'transition': 'top 0.1s linear, transform 0.1s ease', # Smooth interpolation
+        'transition': 'top 0.25s linear, transform 0.2s ease', # 250ms smooth interpolation
         'boxShadow': 'inset -3px -3px 0px 0px rgba(0,0,0,0.2)'  
     })
     
@@ -198,14 +199,14 @@ def update_game(n, start_clicks, state, last_jump):
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': '0px', 
         'width': f'{pipe_width}px', 'height': f"{state['pipe_hole_y']}px", 
         'backgroundColor': '#2E8B57', 'border': '3px solid #006400',
-        'transition': 'left 0.1s linear' # Smooth interpolation
+        'transition': 'left 0.25s linear' # 250ms smooth interpolation
     })
     
     pipe_bottom = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': f"{state['pipe_hole_y'] + HOLE_SIZE}px", 
         'width': f'{pipe_width}px', 'height': f"{400 - (state['pipe_hole_y'] + HOLE_SIZE)}px", 
         'backgroundColor': '#2E8B57', 'border': '3px solid #006400',
-        'transition': 'left 0.1s linear' # Smooth interpolation
+        'transition': 'left 0.25s linear' # 250ms smooth interpolation
     })
 
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}"

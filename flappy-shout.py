@@ -3,7 +3,12 @@ from dash import Dash, html, dcc, Input, Output, State, ctx
 import time
 import random
 
-app = Dash(__name__, suppress_callback_exceptions=True)
+
+app = Dash(__name__, suppress_callback_exceptions=True, meta_tags=[
+    {"name": "viewport", "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"}
+])
+server = app.server
+
 server = app.server
 # ==========================================
 # 1. GAME SETTINGS & PHYSICS CONFIGURATION

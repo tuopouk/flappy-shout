@@ -210,7 +210,7 @@ def update_game(n, start_clicks, state, last_jump):
         'transition': f'left {CSS_TRANSITION}'
     })
     bird = html.Div(
-        "🐦", 
+        "🐣", 
         style={
             'position': 'absolute', 
             'left': f'{bird_x}px', 

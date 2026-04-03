@@ -1,1 +1,1 @@
-web: gunicorn flappy-shout:server
+web: gunicorn flappy-shout:server --threads 4

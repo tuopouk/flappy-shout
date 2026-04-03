@@ -1,11 +1,40 @@
+import os
 import dash_audio_recorder
-from dash import Dash, html, dcc, Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State, ctx
+from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import time
 import random
 
 # ==========================================
-# 1. APP INITIALIZATION
+# 1. ENVIRONMENT DETECTION (Local vs. Cloud)
+# ==========================================
+# Heroku automatically sets a 'PORT' environment variable. 
+# If it's missing, we know the game is running locally on your computer.
+IS_LOCAL = os.environ.get('PORT') is None
+
+if IS_LOCAL:
+    # 🏎️ LOCAL SETTINGS: Ultra-smooth 25 FPS (No network lag)
+    TICK_RATE = 40
+    CSS_TRANSITION = '0.04s linear'
+    GRAVITY = 1.5         
+    JUMP_STRENGTH = -12   
+    PIPE_SPEED = 10       
+    JUMP_COOLDOWN = 0.2
+else:
+    # ☁️ CLOUD SETTINGS: Stable 6.6 FPS (Prevents Heroku/Mobile network jams)
+    TICK_RATE = 150
+    CSS_TRANSITION = '0.15s linear'
+    GRAVITY = 4.0         
+    JUMP_STRENGTH = -22   
+    PIPE_SPEED = 20       
+    JUMP_COOLDOWN = 0.4
+
+HOLE_SIZE = 170       
+SHOUT_THRESHOLD = 40  
+
+# ==========================================
+# 2. APP INITIALIZATION
 # ==========================================
 app = Dash(__name__, 
            external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -15,15 +44,6 @@ app = Dash(__name__,
 server = app.server 
 
 # ==========================================
-# 2. GAME SETTINGS
-# ==========================================
-GRAVITY = 4.0         
-JUMP_STRENGTH = -22   
-PIPE_SPEED = 20       
-HOLE_SIZE = 170       
-SHOUT_THRESHOLD = 40  
-
-# ==========================================
 # 3. APP LAYOUT
 # ==========================================
 app.layout = dbc.Container([
@@ -31,17 +51,16 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.H1("Ploply 🐦🗣️", className="text-center mt-3 mb-1"),
-            html.P("SHOUT to survive!", className="text-center fw-bold mb-3 text-muted"),
+            # Shows a small indicator of which version is running
+            html.P(f"SHOUT to survive! (Mode: {'Local Smooth' if IS_LOCAL else 'Cloud Stable'})", 
+                   className="text-center fw-bold mb-3 text-muted"),
         ])
     ]),
 
     dbc.Row(className="justify-content-center align-items-center mb-3", children=[
         dbc.Col(width="auto", children=[
             dash_audio_recorder.DashAudioRecorder(
-                id='recorder',
-                visualMode='small',
-                recordMode='click',
-                streamMode=True,
+                id='recorder', visualMode='small', recordMode='click', streamMode=True,
                 echoCancellation=False, noiseSuppression=False, autoGainControl=False
             )
         ]),
@@ -75,15 +94,12 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # KRIITTINEN MUUTOS: disabled=True oletuksena. Kello käynnistyy vasta kun nappia painetaan!
-    dcc.Interval(id='game-clock', interval=150, n_intervals=0, disabled=True),
+    # The interval now dynamically uses TICK_RATE based on the environment!
+    dcc.Interval(id='game-clock', interval=TICK_RATE, n_intervals=0, disabled=True),
     
     dcc.Store(id='game-state', data={
-        'bird_y': 200, 'velocity': 0, 
-        'pipe_x': 400, 'pipe_hole_y': 150, 
-        'score': 0, 'status': 'waiting',
-        'start_clicks': 0,
-        'processed_jump': 0 
+        'bird_y': 200, 'velocity': 0, 'pipe_x': 400, 'pipe_hole_y': 150, 
+        'score': 0, 'status': 'waiting', 'start_clicks': 0, 'processed_jump': 0 
     }),
     
     dcc.Store(id='last-jump-time', data=0)
@@ -98,8 +114,7 @@ app.layout = dbc.Container([
     Input('recorder', 'currentVolume')
 )
 def update_volume_meter(volume):
-    if volume is None:
-        return {'width': '0%', 'height': '100%', 'backgroundColor': '#198754'}
+    if volume is None: return {'width': '0%', 'height': '100%', 'backgroundColor': '#198754'}
     pct = min(100, (volume / 128) * 100)
     color = '#dc3545' if volume > SHOUT_THRESHOLD else '#198754'
     return {'width': f'{pct}%', 'height': '100%', 'backgroundColor': color, 'transition': 'width 0.1s ease'}
@@ -110,9 +125,7 @@ def update_volume_meter(volume):
 app.clientside_callback(
     """
     function(volume, last_time) {
-        if (!volume || volume < 40) {
-            return window.dash_clientside.no_update; 
-        }
+        if (!volume || volume < 40) return window.dash_clientside.no_update; 
         return Date.now() / 1000.0; 
     }
     """,
@@ -128,7 +141,7 @@ app.clientside_callback(
     Output('game-state', 'data'),
     Output('game-board', 'children'),
     Output('score-display', 'children'),
-    Output('game-clock', 'disabled'), # UUSI OUTPUT: Ohjataan kellon nukkumista!
+    Output('game-clock', 'disabled'), 
     Input('game-clock', 'n_intervals'), 
     Input('start-btn', 'n_clicks'),     
     State('game-state', 'data'),
@@ -137,7 +150,6 @@ app.clientside_callback(
 def update_game(n, start_clicks, state, last_jump):
     if start_clicks is None: start_clicks = 0
 
-    # 1. NAPIN PAINALLUS: Käynnistää pelin varmasti, koska kello nukkuu!
     if start_clicks > state.get('start_clicks', 0):
         state = {
             'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
@@ -146,24 +158,28 @@ def update_game(n, start_clicks, state, last_jump):
             'processed_jump': time.time() 
         }
 
-    # 2. WAITING STATE: Kello pidetään nukuksissa (disabled = True)
     if state['status'] == 'waiting':
         screen = html.H2("Ready?", className="text-center text-dark", style={'marginTop': '150px'})
         return state, screen, "Press START!", True 
 
-    # 3. GAME OVER STATE: Kello sammutetaan (disabled = True)
     if state['status'] == 'game_over':
         screen = html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '100px'})
         return state, screen, f"Score: {state['score']} 🏆", True 
 
-    # 4. PHYSICS ENGINE (Suoritetaan vain kun peli on 'playing' ja kello on hereillä)
+    # --- PHYSICS ENGINE ---
     now = time.time()
-    if (now - last_jump < 0.40) and (now - state.get('processed_jump', 0) > 0.40):
+    
+    # Dynamics cooldown based on environment
+    if (now - last_jump < JUMP_COOLDOWN) and (now - state.get('processed_jump', 0) > JUMP_COOLDOWN):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
         
     state['velocity'] += GRAVITY
-    if state['velocity'] > 30: state['velocity'] = 30
+    
+    # Cap falling speed dynamically
+    max_fall = 20 if IS_LOCAL else 30
+    if state['velocity'] > max_fall: state['velocity'] = max_fall
+        
     state['bird_y'] += state['velocity']
     state['pipe_x'] -= PIPE_SPEED
     
@@ -172,7 +188,7 @@ def update_game(n, start_clicks, state, last_jump):
         state['score'] += 1
         state['pipe_hole_y'] = random.randint(50, 170) 
 
-    # Collisions
+    # --- COLLISIONS ---
     bird_x, bird_size, pipe_width = 50, 30, 50
     if state['bird_y'] > 370 or state['bird_y'] < 0:
         state['status'] = 'game_over'
@@ -180,29 +196,33 @@ def update_game(n, start_clicks, state, last_jump):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             state['status'] = 'game_over'
 
-    # Rendering
-    rotation = max(-20, min(90, state['velocity'] * 2.5))
+    # --- RENDERING ---
+    # Dynamics rotation based on environment
+    rot_multiplier = 4 if IS_LOCAL else 2.5
+    rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     
     bird = html.Div(style={
         'position': 'absolute', 'left': f'{bird_x}px', 'top': f"{state['bird_y']}px", 
         'width': f'{bird_size}px', 'height': f'{bird_size}px', 'backgroundColor': '#FFC107', 
         'borderRadius': '50%', 'border': '2px solid black', 'transform': f'rotate({rotation}deg)', 
-        'transition': 'top 0.15s linear, transform 0.1s ease'
+        # Dynamic CSS Transition!
+        'transition': f'top {CSS_TRANSITION}, transform 0.1s ease'
     })
     
     pipe_top = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': '0px', 
         'width': f'{pipe_width}px', 'height': f"{state['pipe_hole_y']}px", 
-        'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.15s linear'
+        'backgroundColor': '#198754', 'border': '3px solid #146c43', 
+        'transition': f'left {CSS_TRANSITION}'
     })
     
     pipe_bottom = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': f"{state['pipe_hole_y'] + HOLE_SIZE}px", 
         'width': f'{pipe_width}px', 'height': f"{400 - (state['pipe_hole_y'] + HOLE_SIZE)}px", 
-        'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.15s linear'
+        'backgroundColor': '#198754', 'border': '3px solid #146c43', 
+        'transition': f'left {CSS_TRANSITION}'
     })
 
-    # Palautetaan Disabled = False, jotta kello jatkaa tikittämistä
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}", False
 
 if __name__ == '__main__':

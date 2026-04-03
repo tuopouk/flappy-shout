@@ -1,4 +1,4 @@
-# Flappy Shout! 🐦🗣️
+# PLOPLY! 🐦🗣️
 
 A voice-controlled Flappy Bird clone built entirely in Python using [Dash](https://dash.plotly.com/).
 

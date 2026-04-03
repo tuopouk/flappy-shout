@@ -201,13 +201,7 @@ def update_game(n, start_clicks, state, last_jump):
     rot_multiplier = 4 if IS_LOCAL else 2.5
     rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     
-    bird = html.Div(style={
-        'position': 'absolute', 'left': f'{bird_x}px', 'top': f"{state['bird_y']}px", 
-        'width': f'{bird_size}px', 'height': f'{bird_size}px', 'backgroundColor': '#FFC107', 
-        'borderRadius': '50%', 'border': '2px solid black', 'transform': f'rotate({rotation}deg)', 
-        # Dynamic CSS Transition!
-        'transition': f'top {CSS_TRANSITION}, transform 0.1s ease'
-    })
+    
     
     pipe_top = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': '0px', 
@@ -215,7 +209,25 @@ def update_game(n, start_clicks, state, last_jump):
         'backgroundColor': '#198754', 'border': '3px solid #146c43', 
         'transition': f'left {CSS_TRANSITION}'
     })
-    
+    bird = html.Div(
+        "🐦", 
+        style={
+            'position': 'absolute', 
+            'left': f'{bird_x}px', 
+            'top': f"{state['bird_y']}px", 
+            'width': f'{bird_size}px', 
+            'height': f'{bird_size}px', 
+            
+            # --- EMOJIN SETTINGS ---
+            'fontSize': '26px',              # Emoji size
+            'textAlign': 'center',           
+            'lineHeight': f'{bird_size}px',  
+            
+            
+            'transform': f'rotate({rotation}deg)', 
+            'transition': f'top {CSS_TRANSITION}, transform 0.1s ease'
+        }
+    )
     pipe_bottom = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': f"{state['pipe_hole_y'] + HOLE_SIZE}px", 
         'width': f'{pipe_width}px', 'height': f"{400 - (state['pipe_hole_y'] + HOLE_SIZE)}px", 

@@ -1,6 +1,5 @@
 import dash_audio_recorder
-from dash import Dash, html, dcc, Input, Output, State, ctx
-from dash.exceptions import PreventUpdate  # KRIITTINEN LISÄYS!
+from dash import Dash, html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import time
 import random
@@ -76,12 +75,14 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    dcc.Interval(id='game-clock', interval=150, n_intervals=0),
+    # KRIITTINEN MUUTOS: disabled=True oletuksena. Kello käynnistyy vasta kun nappia painetaan!
+    dcc.Interval(id='game-clock', interval=150, n_intervals=0, disabled=True),
     
     dcc.Store(id='game-state', data={
         'bird_y': 200, 'velocity': 0, 
         'pipe_x': 400, 'pipe_hole_y': 150, 
         'score': 0, 'status': 'waiting',
+        'start_clicks': 0,
         'processed_jump': 0 
     }),
     
@@ -109,11 +110,10 @@ def update_volume_meter(volume):
 app.clientside_callback(
     """
     function(volume, last_time) {
-        if (!volume) return window.dash_clientside.no_update; 
-        if (volume > 40) {
-            return Date.now() / 1000.0; 
+        if (!volume || volume < 40) {
+            return window.dash_clientside.no_update; 
         }
-        return window.dash_clientside.no_update; 
+        return Date.now() / 1000.0; 
     }
     """,
     Output('last-jump-time', 'data'),
@@ -128,44 +128,35 @@ app.clientside_callback(
     Output('game-state', 'data'),
     Output('game-board', 'children'),
     Output('score-display', 'children'),
+    Output('game-clock', 'disabled'), # UUSI OUTPUT: Ohjataan kellon nukkumista!
     Input('game-clock', 'n_intervals'), 
     Input('start-btn', 'n_clicks'),     
     State('game-state', 'data'),
     State('last-jump-time', 'data')
 )
 def update_game(n, start_clicks, state, last_jump):
-    trigger = ctx.triggered_id
+    if start_clicks is None: start_clicks = 0
 
-    # ---------------------------------------------------------
-    # RACE CONDITION FIX: Prevent interval from overwriting button clicks!
-    # If the game is not actively playing, ignore the game-clock completely.
-    # ---------------------------------------------------------
-    if trigger == 'game-clock' and state['status'] != 'playing':
-        raise PreventUpdate
-
-    # ---------------------------------------------------------
-    # BUTTON LOGIC: Force start the game when button is clicked
-    # ---------------------------------------------------------
-    if trigger == 'start-btn':
+    # 1. NAPIN PAINALLUS: Käynnistää pelin varmasti, koska kello nukkuu!
+    if start_clicks > state.get('start_clicks', 0):
         state = {
             'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
             'pipe_hole_y': random.randint(50, 170), 'score': 0, 
-            'status': 'playing', 'processed_jump': time.time() 
+            'status': 'playing', 'start_clicks': start_clicks,
+            'processed_jump': time.time() 
         }
-        # Fall through to the physics below so the first frame renders instantly!
 
-    # ---------------------------------------------------------
-    # UI: WAITING & GAME OVER STATES
-    # ---------------------------------------------------------
+    # 2. WAITING STATE: Kello pidetään nukuksissa (disabled = True)
     if state['status'] == 'waiting':
-        return state, html.H2("Ready?", className="text-center text-dark", style={'marginTop': '150px'}), "Press START!"
+        screen = html.H2("Ready?", className="text-center text-dark", style={'marginTop': '150px'})
+        return state, screen, "Press START!", True 
 
+    # 3. GAME OVER STATE: Kello sammutetaan (disabled = True)
     if state['status'] == 'game_over':
-        return state, html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '100px'}), f"Score: {state['score']} 🏆"
+        screen = html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '100px'})
+        return state, screen, f"Score: {state['score']} 🏆", True 
 
-    # ---------------------------------------------------------
-    # PHYSICS ENGINE (Only runs when status == 'playing')
-    # ---------------------------------------------------------
+    # 4. PHYSICS ENGINE (Suoritetaan vain kun peli on 'playing' ja kello on hereillä)
     now = time.time()
     if (now - last_jump < 0.40) and (now - state.get('processed_jump', 0) > 0.40):
         state['velocity'] = JUMP_STRENGTH
@@ -189,9 +180,7 @@ def update_game(n, start_clicks, state, last_jump):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             state['status'] = 'game_over'
 
-    # ---------------------------------------------------------
-    # RENDERING
-    # ---------------------------------------------------------
+    # Rendering
     rotation = max(-20, min(90, state['velocity'] * 2.5))
     
     bird = html.Div(style={
@@ -213,7 +202,8 @@ def update_game(n, start_clicks, state, last_jump):
         'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.15s linear'
     })
 
-    return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}"
+    # Palautetaan Disabled = False, jotta kello jatkaa tikittämistä
+    return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}", False
 
 if __name__ == '__main__':
     app.run(debug=True)

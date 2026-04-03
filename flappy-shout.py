@@ -54,7 +54,7 @@ app.layout = html.Div([
     ]),
 
     # GAME CLOCK: Ticks every 40ms (equivalent to 25 Frames Per Second)
-    dcc.Interval(id='game-clock', interval=40, n_intervals=0),
+    dcc.Interval(id='game-clock', interval=400, n_intervals=0),
     
     # GAME STATE MEMORY: Holds all dynamic variables during gameplay
     dcc.Store(id='game-state', data={

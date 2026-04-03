@@ -238,4 +238,4 @@ def update_game(n, start_clicks, state, last_jump):
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}", False
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)

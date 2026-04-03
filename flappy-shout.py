@@ -1,11 +1,11 @@
 import dash_audio_recorder
-from dash import Dash, html, dcc, Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
 import time
 import random
 
 # ==========================================
-# 1. APP INITIALIZATION & MOBILE OPTIMIZATION
+# 1. APP INITIALIZATION
 # ==========================================
 app = Dash(__name__, 
            external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -15,14 +15,13 @@ app = Dash(__name__,
 server = app.server 
 
 # ==========================================
-# 2. PRO GAME SETTINGS (10 FPS Version)
+# 2. GAME SETTINGS (Balanced for 150ms Stable Loop)
 # ==========================================
-# Physics are now balanced for a faster 100ms game loop.
-GRAVITY = 2.8         # Downward pull per frame
-JUMP_STRENGTH = -18   # Upward impulse when shouting
-PIPE_SPEED = 18       # Horizontal speed of pipes
-HOLE_SIZE = 170       # Slightly smaller hole for more challenge
-SHOUT_THRESHOLD = 40  # Volume threshold for jumping
+GRAVITY = 4.0         
+JUMP_STRENGTH = -22   
+PIPE_SPEED = 20       
+HOLE_SIZE = 170       
+SHOUT_THRESHOLD = 40  
 
 # ==========================================
 # 3. APP LAYOUT
@@ -32,11 +31,10 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.H1("Flappy Shout: PRO 🐦🗣️", className="text-center mt-3 mb-1"),
-            html.P("Higher speed version - SHOUT to survive!", className="text-center fw-bold mb-3 text-muted"),
+            html.P("Stable Mobile Version - SHOUT to survive!", className="text-center fw-bold mb-3 text-muted"),
         ])
     ]),
 
-    # Controls: Mic, Start Button, and Volume Meter
     dbc.Row(className="justify-content-center align-items-center mb-3", children=[
         dbc.Col(width="auto", children=[
             dash_audio_recorder.DashAudioRecorder(
@@ -66,7 +64,6 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # Game Board
     dbc.Row(className="justify-content-center", children=[
         dbc.Col(width="auto", children=[
             html.Div(id='game-board', className="shadow-lg", style={
@@ -78,8 +75,8 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # Faster Interval: 100ms
-    dcc.Interval(id='game-clock', interval=100, n_intervals=0),
+    # KRIITTINEN KORJAUS: Takaisin 150ms vakaaseen rytmiin!
+    dcc.Interval(id='game-clock', interval=150, n_intervals=0),
     
     dcc.Store(id='game-state', data={
         'bird_y': 200, 'velocity': 0, 
@@ -110,11 +107,10 @@ def update_volume_meter(volume):
 # ==========================================
 # 5. CALLBACK: CLIENTSIDE VOICE DETECTION
 # ==========================================
-# This JavaScript runs locally on the phone to eliminate mic latency.
 app.clientside_callback(
     """
     function(volume, last_time) {
-        if (volume === null) return window.dash_clientside.no_update;
+        if (!volume) return window.dash_clientside.no_update; // Varmistetaan ettei tyhjä data kaada selainta
         if (volume > 40) {
             return Date.now() / 1000.0; 
         }
@@ -141,10 +137,11 @@ app.clientside_callback(
 def update_game(n, start_clicks, state, last_jump):
     if start_clicks is None: start_clicks = 0
 
-    # Start/Reset Logic
-    if start_clicks > state.get('start_clicks', 0):
+    # KRIITTINEN KORJAUS: Varmistetaan ctx:llä, että Start-nappi menee aina läpi!
+    trigger = ctx.triggered_id
+    if trigger == 'start-btn' and start_clicks > 0:
         state = {
-            'bird_y': 200, 'velocity': -10, 'pipe_x': 400, 
+            'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
             'pipe_hole_y': random.randint(50, 170), 'score': 0, 
             'status': 'playing', 'start_clicks': start_clicks,
             'processed_jump': time.time() 
@@ -158,12 +155,12 @@ def update_game(n, start_clicks, state, last_jump):
 
     # Physics
     now = time.time()
-    if (now - last_jump < 0.30) and (now - state.get('processed_jump', 0) > 0.35):
+    if (now - last_jump < 0.40) and (now - state.get('processed_jump', 0) > 0.40):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
         
     state['velocity'] += GRAVITY
-    if state['velocity'] > 25: state['velocity'] = 25
+    if state['velocity'] > 30: state['velocity'] = 30
     state['bird_y'] += state['velocity']
     state['pipe_x'] -= PIPE_SPEED
     
@@ -180,26 +177,26 @@ def update_game(n, start_clicks, state, last_jump):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             state['status'] = 'game_over'
 
-    # Rendering with 0.1s transitions to match 100ms interval
-    rotation = max(-20, min(90, state['velocity'] * 3))
+    # Rendering with 0.15s transitions to match 150ms interval perfectly
+    rotation = max(-20, min(90, state['velocity'] * 2.5))
     
     bird = html.Div(style={
         'position': 'absolute', 'left': f'{bird_x}px', 'top': f"{state['bird_y']}px", 
         'width': f'{bird_size}px', 'height': f'{bird_size}px', 'backgroundColor': '#FFC107', 
         'borderRadius': '50%', 'border': '2px solid black', 'transform': f'rotate({rotation}deg)', 
-        'transition': 'top 0.1s linear, transform 0.1s ease'
+        'transition': 'top 0.15s linear, transform 0.1s ease'
     })
     
     pipe_top = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': '0px', 
         'width': f'{pipe_width}px', 'height': f"{state['pipe_hole_y']}px", 
-        'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.1s linear'
+        'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.15s linear'
     })
     
     pipe_bottom = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': f"{state['pipe_hole_y'] + HOLE_SIZE}px", 
         'width': f'{pipe_width}px', 'height': f"{400 - (state['pipe_hole_y'] + HOLE_SIZE)}px", 
-        'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.1s linear'
+        'backgroundColor': '#198754', 'border': '3px solid #146c43', 'transition': 'left 0.15s linear'
     })
 
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}"

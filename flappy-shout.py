@@ -211,31 +211,35 @@ def update_game(n, start_clicks, state, last_jump):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             state['status'] = 'game_over'
 
-    # --- RENDERING (WITH EMOJI!) ---
+    # --- RENDERING (GPU ACCELERATED) ---
     rot_multiplier = 4 if IS_LOCAL else 2.5
     rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     
-    # Pallo poistettu, tilalla aito Emoji!
+    # 1. BIRD
     bird = html.Div("🐣", style={
-        'position': 'absolute', 'left': f'{bird_x}px', 'top': f"{state['bird_y']}px", 
+        'position': 'absolute', 'left': '0px', 'top': '0px', # Nollataan perussijainti
         'width': f'{bird_size}px', 'height': f'{bird_size}px', 
         'fontSize': '26px', 'textAlign': 'center', 'lineHeight': f'{bird_size}px',
-        'transform': f'rotate({rotation}deg)', 
-        'transition': f'top {CSS_TRANSITION}, transform 0.1s ease'
+        # Yhdistetään X-sijainti, Y-sijainti ja kierto samaan tehokkaaseen komentoon:
+        'transform': f'translate3d({bird_x}px, {state["bird_y"]}px, 0) rotate({rotation}deg)', 
+        'transition': f'transform {CSS_TRANSITION}' # Animoidaan vain transformia
     })
     
+    # 2. PIPES
     pipe_top = html.Div(style={
-        'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': '0px', 
+        'position': 'absolute', 'left': '0px', 'top': '0px', 
         'width': f'{pipe_width}px', 'height': f"{state['pipe_hole_y']}px", 
         'backgroundColor': '#198754', 'border': '3px solid #146c43', 
-        'transition': f'left {CSS_TRANSITION}'
+        'transform': f'translate3d({state["pipe_x"]}px, 0, 0)',
+        'transition': f'transform {CSS_TRANSITION}'
     })
     
     pipe_bottom = html.Div(style={
-        'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': f"{state['pipe_hole_y'] + HOLE_SIZE}px", 
+        'position': 'absolute', 'left': '0px', 'top': '0px', 
         'width': f'{pipe_width}px', 'height': f"{400 - (state['pipe_hole_y'] + HOLE_SIZE)}px", 
         'backgroundColor': '#198754', 'border': '3px solid #146c43', 
-        'transition': f'left {CSS_TRANSITION}'
+        'transform': f'translate3d({state["pipe_x"]}px, {state["pipe_hole_y"] + HOLE_SIZE}px, 0)',
+        'transition': f'transform {CSS_TRANSITION}'
     })
 
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}", False

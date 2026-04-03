@@ -9,12 +9,10 @@ import random
 # ==========================================
 # 1. ENVIRONMENT DETECTION (Local vs. Cloud)
 # ==========================================
-# Heroku automatically sets a 'PORT' environment variable. 
-# If it's missing, we know the game is running locally on your computer.
 IS_LOCAL = os.environ.get('PORT') is None
 
 if IS_LOCAL:
-    # 🏎️ LOCAL SETTINGS: Ultra-smooth 25 FPS (No network lag)
+    # 🏎️ LOCAL SETTINGS: 25 FPS
     TICK_RATE = 40
     CSS_TRANSITION = '0.04s linear'
     GRAVITY = 1.5         
@@ -22,7 +20,7 @@ if IS_LOCAL:
     PIPE_SPEED = 10       
     JUMP_COOLDOWN = 0.2
 else:
-    # ☁️ CLOUD SETTINGS: Stable 6.6 FPS (Prevents Heroku/Mobile network jams)
+    # ☁️ CLOUD SETTINGS: Stable 6.6 FPS for Mobile
     TICK_RATE = 150
     CSS_TRANSITION = '0.15s linear'
     GRAVITY = 4.0         
@@ -31,7 +29,6 @@ else:
     JUMP_COOLDOWN = 0.4
 
 HOLE_SIZE = 170       
-SHOUT_THRESHOLD = 40  
 
 # ==========================================
 # 2. APP INITIALIZATION
@@ -48,15 +45,16 @@ server = app.server
 # ==========================================
 app.layout = dbc.Container([
     
+    # --- HEADER ---
     dbc.Row([
         dbc.Col([
-            html.H1("Ploply Bird 🐦🗣️", className="text-center mt-3 mb-1"),
-            # Shows a small indicator of which version is running
+            html.H1("Ploply 🐦🗣️", className="text-center mt-3 mb-1"),
             html.P(f"SHOUT to survive! (Mode: {'Local Smooth' if IS_LOCAL else 'Cloud Stable'})", 
-                   className="text-center fw-bold mb-3 text-muted"),
+                   className="text-center fw-bold mb-2 text-muted"),
         ])
     ]),
 
+    # --- CONTROLS: MIC, START, METER ---
     dbc.Row(className="justify-content-center align-items-center mb-3", children=[
         dbc.Col(width="auto", children=[
             dash_audio_recorder.DashAudioRecorder(
@@ -83,6 +81,23 @@ app.layout = dbc.Container([
         ])
     ]),
 
+    # --- NEW: SENSITIVITY SLIDER ---
+    dbc.Row(className="justify-content-center mb-3", children=[
+        dbc.Col(width=10, md=6, children=[
+            html.Div("Microphone Sensitivity (Lower = reacts to quiet sounds)", 
+                     className="text-center text-muted fw-bold", 
+                     style={'fontSize': '11px', 'marginBottom': '5px'}),
+            dcc.Slider(
+                id='sensitivity-slider',
+                min=5, max=100, step=5, value=40, # 40 on normaali puhelimelle, PC voi vaatia ~15
+                marks={10: 'PC Mic', 40: 'Mobile', 80: 'Loud'},
+                updatemode='drag',
+                className="p-0"
+            )
+        ])
+    ]),
+
+    # --- GAME BOARD ---
     dbc.Row(className="justify-content-center", children=[
         dbc.Col(width="auto", children=[
             html.Div(id='game-board', className="shadow-lg", style={
@@ -94,7 +109,6 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # The interval now dynamically uses TICK_RATE based on the environment!
     dcc.Interval(id='game-clock', interval=TICK_RATE, n_intervals=0, disabled=True),
     
     dcc.Store(id='game-state', data={
@@ -107,16 +121,19 @@ app.layout = dbc.Container([
 ], fluid=True, className="pb-5")
 
 # ==========================================
-# 4. CALLBACK: VOLUME METER
+# 4. CALLBACK: DYNAMIC VOLUME METER
 # ==========================================
 @app.callback(
     Output('meter-fill', 'style'),
-    Input('recorder', 'currentVolume')
+    Input('recorder', 'currentVolume'),
+    Input('sensitivity-slider', 'value') # <-- Mittari lukee nyt säätimen arvoa!
 )
-def update_volume_meter(volume):
+def update_volume_meter(volume, threshold):
     if volume is None: return {'width': '0%', 'height': '100%', 'backgroundColor': '#198754'}
     pct = min(100, (volume / 128) * 100)
-    color = '#dc3545' if volume > SHOUT_THRESHOLD else '#198754'
+    
+    # Väri muuttuu punaiseksi heti kun säätimen asettama kynnys (threshold) ylittyy
+    color = '#dc3545' if volume > threshold else '#198754'
     return {'width': f'{pct}%', 'height': '100%', 'backgroundColor': color, 'transition': 'width 0.1s ease'}
 
 # ==========================================
@@ -124,13 +141,15 @@ def update_volume_meter(volume):
 # ==========================================
 app.clientside_callback(
     """
-    function(volume, last_time) {
-        if (!volume || volume < 40) return window.dash_clientside.no_update; 
+    function(volume, threshold, last_time) {
+        // Javascript lukee dynaamisesti liukusäätimen arvon!
+        if (!volume || volume < threshold) return window.dash_clientside.no_update; 
         return Date.now() / 1000.0; 
     }
     """,
     Output('last-jump-time', 'data'),
     Input('recorder', 'currentVolume'),
+    State('sensitivity-slider', 'value'), # <-- Säädin välitetään suoraan puhelimen selaimeen
     State('last-jump-time', 'data')
 )
 
@@ -166,17 +185,13 @@ def update_game(n, start_clicks, state, last_jump):
         screen = html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '100px'})
         return state, screen, f"Score: {state['score']} 🏆", True 
 
-    # --- PHYSICS ENGINE ---
+    # --- PHYSICS ---
     now = time.time()
-    
-    # Dynamics cooldown based on environment
     if (now - last_jump < JUMP_COOLDOWN) and (now - state.get('processed_jump', 0) > JUMP_COOLDOWN):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
         
     state['velocity'] += GRAVITY
-    
-    # Cap falling speed dynamically
     max_fall = 20 if IS_LOCAL else 30
     if state['velocity'] > max_fall: state['velocity'] = max_fall
         
@@ -196,12 +211,18 @@ def update_game(n, start_clicks, state, last_jump):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             state['status'] = 'game_over'
 
-    # --- RENDERING ---
-    # Dynamics rotation based on environment
+    # --- RENDERING (WITH EMOJI!) ---
     rot_multiplier = 4 if IS_LOCAL else 2.5
     rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     
-    
+    # Pallo poistettu, tilalla aito Emoji!
+    bird = html.Div("🐣", style={
+        'position': 'absolute', 'left': f'{bird_x}px', 'top': f"{state['bird_y']}px", 
+        'width': f'{bird_size}px', 'height': f'{bird_size}px', 
+        'fontSize': '26px', 'textAlign': 'center', 'lineHeight': f'{bird_size}px',
+        'transform': f'rotate({rotation}deg)', 
+        'transition': f'top {CSS_TRANSITION}, transform 0.1s ease'
+    })
     
     pipe_top = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': '0px', 
@@ -209,25 +230,7 @@ def update_game(n, start_clicks, state, last_jump):
         'backgroundColor': '#198754', 'border': '3px solid #146c43', 
         'transition': f'left {CSS_TRANSITION}'
     })
-    bird = html.Div(
-        "🐣", 
-        style={
-            'position': 'absolute', 
-            'left': f'{bird_x}px', 
-            'top': f"{state['bird_y']}px", 
-            'width': f'{bird_size}px', 
-            'height': f'{bird_size}px', 
-            
-            # --- EMOJIN SETTINGS ---
-            'fontSize': '26px',              # Emoji size
-            'textAlign': 'center',           
-            'lineHeight': f'{bird_size}px',  
-            
-            
-            'transform': f'rotate({rotation}deg)', 
-            'transition': f'top {CSS_TRANSITION}, transform 0.1s ease'
-        }
-    )
+    
     pipe_bottom = html.Div(style={
         'position': 'absolute', 'left': f"{state['pipe_x']}px", 'top': f"{state['pipe_hole_y'] + HOLE_SIZE}px", 
         'width': f'{pipe_width}px', 'height': f"{400 - (state['pipe_hole_y'] + HOLE_SIZE)}px", 

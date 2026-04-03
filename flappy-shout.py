@@ -1,5 +1,6 @@
 import dash_audio_recorder
 from dash import Dash, html, dcc, Input, Output, State, ctx
+from dash.exceptions import PreventUpdate  # KRIITTINEN LISÄYS!
 import dash_bootstrap_components as dbc
 import time
 import random
@@ -15,7 +16,7 @@ app = Dash(__name__,
 server = app.server 
 
 # ==========================================
-# 2. GAME SETTINGS (Balanced for 150ms Stable Loop)
+# 2. GAME SETTINGS
 # ==========================================
 GRAVITY = 4.0         
 JUMP_STRENGTH = -22   
@@ -75,14 +76,12 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # KRIITTINEN KORJAUS: Takaisin 150ms vakaaseen rytmiin!
     dcc.Interval(id='game-clock', interval=150, n_intervals=0),
     
     dcc.Store(id='game-state', data={
         'bird_y': 200, 'velocity': 0, 
         'pipe_x': 400, 'pipe_hole_y': 150, 
         'score': 0, 'status': 'waiting',
-        'start_clicks': 0,
         'processed_jump': 0 
     }),
     
@@ -110,7 +109,7 @@ def update_volume_meter(volume):
 app.clientside_callback(
     """
     function(volume, last_time) {
-        if (!volume) return window.dash_clientside.no_update; // Varmistetaan ettei tyhjä data kaada selainta
+        if (!volume) return window.dash_clientside.no_update; 
         if (volume > 40) {
             return Date.now() / 1000.0; 
         }
@@ -135,25 +134,38 @@ app.clientside_callback(
     State('last-jump-time', 'data')
 )
 def update_game(n, start_clicks, state, last_jump):
-    if start_clicks is None: start_clicks = 0
-
-    # KRIITTINEN KORJAUS: Varmistetaan ctx:llä, että Start-nappi menee aina läpi!
     trigger = ctx.triggered_id
-    if trigger == 'start-btn' and start_clicks > 0:
+
+    # ---------------------------------------------------------
+    # RACE CONDITION FIX: Prevent interval from overwriting button clicks!
+    # If the game is not actively playing, ignore the game-clock completely.
+    # ---------------------------------------------------------
+    if trigger == 'game-clock' and state['status'] != 'playing':
+        raise PreventUpdate
+
+    # ---------------------------------------------------------
+    # BUTTON LOGIC: Force start the game when button is clicked
+    # ---------------------------------------------------------
+    if trigger == 'start-btn':
         state = {
             'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
             'pipe_hole_y': random.randint(50, 170), 'score': 0, 
-            'status': 'playing', 'start_clicks': start_clicks,
-            'processed_jump': time.time() 
+            'status': 'playing', 'processed_jump': time.time() 
         }
+        # Fall through to the physics below so the first frame renders instantly!
 
+    # ---------------------------------------------------------
+    # UI: WAITING & GAME OVER STATES
+    # ---------------------------------------------------------
     if state['status'] == 'waiting':
         return state, html.H2("Ready?", className="text-center text-dark", style={'marginTop': '150px'}), "Press START!"
 
     if state['status'] == 'game_over':
         return state, html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '100px'}), f"Score: {state['score']} 🏆"
 
-    # Physics
+    # ---------------------------------------------------------
+    # PHYSICS ENGINE (Only runs when status == 'playing')
+    # ---------------------------------------------------------
     now = time.time()
     if (now - last_jump < 0.40) and (now - state.get('processed_jump', 0) > 0.40):
         state['velocity'] = JUMP_STRENGTH
@@ -177,7 +189,9 @@ def update_game(n, start_clicks, state, last_jump):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             state['status'] = 'game_over'
 
-    # Rendering with 0.15s transitions to match 150ms interval perfectly
+    # ---------------------------------------------------------
+    # RENDERING
+    # ---------------------------------------------------------
     rotation = max(-20, min(90, state['velocity'] * 2.5))
     
     bird = html.Div(style={

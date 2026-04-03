@@ -48,7 +48,7 @@ app.layout = dbc.Container([
     # --- HEADER ---
     dbc.Row([
         dbc.Col([
-            html.H1("Ploply 🐦🗣️", className="text-center mt-3 mb-1"),
+            html.H1("Ploply Bird 🐦🗣️", className="text-center mt-3 mb-1"),
             html.P(f"SHOUT to survive! (Mode: {'Local Smooth' if IS_LOCAL else 'Cloud Stable'})", 
                    className="text-center fw-bold mb-2 text-muted"),
         ])

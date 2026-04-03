@@ -4,7 +4,7 @@ import time
 import random
 
 app = Dash(__name__, suppress_callback_exceptions=True)
-
+server = app.server
 # ==========================================
 # 1. GAME SETTINGS & PHYSICS CONFIGURATION
 # ==========================================

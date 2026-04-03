@@ -1,1 +1,1 @@
-web: gunicorn flappy_shout:server
+web: gunicorn flappy-shout:server

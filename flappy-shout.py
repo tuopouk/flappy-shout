@@ -30,8 +30,8 @@ app.layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            html.H1("Flappy Shout: PRO 🐦🗣️", className="text-center mt-3 mb-1"),
-            html.P("Stable Mobile Version - SHOUT to survive!", className="text-center fw-bold mb-3 text-muted"),
+            html.H1("Ploply 🐦🗣️", className="text-center mt-3 mb-1"),
+            html.P("SHOUT to survive!", className="text-center fw-bold mb-3 text-muted"),
         ])
     ]),
 

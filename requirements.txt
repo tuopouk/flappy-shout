@@ -1,3 +1,4 @@
 dash
 dash-audio-recorder
 gunicorn
+dash-bootstrap-components

@@ -46,13 +46,11 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             html.H1("Ploply 🐣🗣️", className="text-center mt-3 mb-1"),
-            # Ohjetta päivitetty: Hands-free!
             html.P("1. Click Mic 👉 2. SHOUT to Start!", 
                    className="text-center fw-bold mb-2 text-primary"),
         ])
     ]),
 
-    # START-NAPPI POISTETTU! Jätetty vain mikki ja mittari.
     dbc.Row(className="justify-content-center align-items-center mb-3", children=[
         dbc.Col(width="auto", children=[
             dash_audio_recorder.DashAudioRecorder(
@@ -104,9 +102,10 @@ app.layout = dbc.Container([
 
     dcc.Interval(id='game-clock', interval=TICK_RATE, n_intervals=0, disabled=True),
     
+    # LISÄTTY: 'death_time' pitää kirjaa kuolinhetkestä
     dcc.Store(id='game-state', data={
         'bird_y': 200, 'velocity': 0, 'pipe_x': 400, 'pipe_hole_y': 150, 
-        'score': 0, 'status': 'waiting', 'processed_jump': 0 
+        'score': 0, 'status': 'waiting', 'processed_jump': 0, 'death_time': 0
     }),
     
     dcc.Store(id='last-jump-time', data=0)
@@ -152,28 +151,35 @@ app.clientside_callback(
     Output('score-display', 'children'),
     Output('game-clock', 'disabled'), 
     Input('game-clock', 'n_intervals'), 
-    Input('last-jump-time', 'data'),  # KRIITTINEN MUUTOS: Huuto on nyt Input, joka herättää pelin!
+    Input('last-jump-time', 'data'),  
     State('game-state', 'data')
 )
 def update_game(n, last_jump, state):
     trigger = ctx.triggered_id
     now = time.time()
-    
-    # Tarkistetaan, huusiko pelaaja juuri
     is_shouting = (now - last_jump < 0.50)
 
     # 1. VALIKKOTILAT: Odotus tai Game Over
     if state['status'] in ['waiting', 'game_over']:
+        can_start = False
+        
         if is_shouting:
-            # Pelaaja huusi! Aloitetaan peli välittömästi.
+            if state['status'] == 'waiting':
+                can_start = True
+            elif state['status'] == 'game_over':
+                # RESTART-LOGIIKKA: Varmistetaan, että kuolemasta on kulunut yli 1.0 sekuntia
+                # JA että huuto on tapahtunut kuoleman jälkeen (ei paniikkihuutoa).
+                death_time = state.get('death_time', 0)
+                if (now - death_time > 1.0) and (last_jump > death_time):
+                    can_start = True
+
+        if can_start:
             state = {
                 'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
                 'pipe_hole_y': random.randint(50, 170), 'score': 0, 
-                'status': 'playing', 'processed_jump': now 
+                'status': 'playing', 'processed_jump': now, 'death_time': 0
             }
-            # Kello menee päälle (Disabled = False) ja koodi jatkuu fysiikkaosioon
         else:
-            # Pidetään peli valikossa ja kello sammutettuna (Disabled = True)
             if state['status'] == 'waiting':
                 screen = html.H2("SHOUT TO START!", className="text-center text-primary fw-bold", style={'marginTop': '150px'})
                 return state, screen, "Turn on Mic first!", True 
@@ -184,11 +190,10 @@ def update_game(n, last_jump, state):
                 ])
                 return state, screen, f"Score: {state['score']} 🏆", True 
 
-    # Estetään pelikellon turhat päivitykset, jos jokin meni vikaan
     if trigger == 'game-clock' and state['status'] != 'playing':
         raise PreventUpdate
 
-    # --- PHYSICS (Suoritetaan vain kun peli on käynnissä) ---
+    # --- PHYSICS ---
     if is_shouting and (now - state.get('processed_jump', 0) > JUMP_COOLDOWN):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
@@ -207,13 +212,19 @@ def update_game(n, last_jump, state):
 
     # --- COLLISIONS ---
     bird_x, bird_size, pipe_width = 50, 30, 50
+    collision = False
+    
     if state['bird_y'] > 370 or state['bird_y'] < 0:
-        state['status'] = 'game_over'
-    if (state['pipe_x'] < bird_x + bird_size) and (state['pipe_x'] + pipe_width > bird_x):
+        collision = True
+    elif (state['pipe_x'] < bird_x + bird_size) and (state['pipe_x'] + pipe_width > bird_x):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
-            state['status'] = 'game_over'
+            collision = True
 
-    # --- RENDERING (GPU ACCELERATED) ---
+    if collision:
+        state['status'] = 'game_over'
+        state['death_time'] = now  # <--- TALLENNETAAN KUOLINHETKI
+
+    # --- RENDERING ---
     rot_multiplier = 4 if IS_LOCAL else 2.5
     rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     
@@ -244,4 +255,4 @@ def update_game(n, last_jump, state):
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}", False
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)

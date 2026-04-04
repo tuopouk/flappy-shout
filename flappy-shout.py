@@ -40,6 +40,29 @@ app = Dash(__name__,
 
 server = app.server 
 
+app.title = "Ploply Bird - SHOUT to Survive!"
+
+app.index_string = '''<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <title>Ploply Bird - SHOUT to Survive!</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+    <link rel="shortcut icon" href="/favicon.ico?v=2">
+    
+    <link rel="manifest" href="/assets/manifest.json" />
+    {%metas%}
+    {%css%}
+    <style>body { font-family: 'Ubuntu', 'Segoe UI', sans-serif; } ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; } .fade-in { animation: fadeIn 0.5s; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }</style>
+</head>
+<body>
+    {%app_entry%}
+    <footer>{%config%}{%scripts%}{%renderer%}</footer>
+</body>
+</html>'''
+
 # ==========================================
 # 3. APP LAYOUT
 # ==========================================

@@ -1,5 +1,7 @@
 # PLOPLY BIRD! 🐦🗣️
 
+![SHOUT to Survive!](assets/logo.png)
+
 A voice-controlled Flappy Bird clone built entirely in Python using [Dash](https://dash.plotly.com/).
 
 Instead of clicking a mouse or pressing a spacebar, you **SHOUT** into your microphone to make the bird flap its wings! This project demonstrates how to build zero-latency, voice-controlled web applications using Python and the `dash-audio-recorder` component.

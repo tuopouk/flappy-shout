@@ -1,0 +1,46 @@
+{
+  "name": "Ploply Bird - SHOUT to Survive!",
+  "short_name": "Ploply Bird",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "dir": "ltr",
+  "lang": "fi",
+  "icons": [
+    {
+      "src": "/assets/images/android-launchericon-192-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/images/android-launchericon-512-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/images/android-launchericon-144-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/images/android-launchericon-96-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/images/android-launchericon-72-72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/images/android-launchericon-48-48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    }
+  ]
+}

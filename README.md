@@ -6,6 +6,8 @@ A voice-controlled Flappy Bird clone built entirely in Python using [Dash](https
 
 Instead of clicking a mouse or pressing a spacebar, you **SHOUT** into your microphone to make the bird flap its wings! This project demonstrates how to build zero-latency, voice-controlled web applications using Python and the `dash-audio-recorder` component.
 
+[Check out the Heroku demo!](https://flappy-shout-222acbab9f2c.herokuapp.com/)
+
 ## 🚀 Features
 - **Zero-latency voice control:** Reads raw volume levels (0-128) directly from the browser's AudioContext.
 - **Custom Physics Engine:** Features gravity, jump cooldowns, terminal velocity, and dynamic rotation.

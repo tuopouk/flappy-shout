@@ -1,6 +1,6 @@
 # PLOPLY BIRD! 🐦🗣️
 
-<img src="assets/logo.png" alt="Ploply Logo" width="300">
+![SHOUT to Survive!](assets/logo.png)
 
 A voice-controlled Flappy Bird clone built entirely in Python using [Dash](https://dash.plotly.com/).
 

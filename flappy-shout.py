@@ -12,7 +12,6 @@ import random
 IS_LOCAL = os.environ.get('PORT') is None
 
 if IS_LOCAL:
-    # 🏎️ LOCAL SETTINGS: 25 FPS
     TICK_RATE = 40
     CSS_TRANSITION = '0.04s linear'
     GRAVITY = 1.5         
@@ -20,7 +19,6 @@ if IS_LOCAL:
     PIPE_SPEED = 10       
     JUMP_COOLDOWN = 0.2
 else:
-    # ☁️ CLOUD SETTINGS: Stable 6.6 FPS for Mobile
     TICK_RATE = 150
     CSS_TRANSITION = '0.15s linear'
     GRAVITY = 4.0         
@@ -40,53 +38,27 @@ app = Dash(__name__,
 
 server = app.server 
 
-app.title = "Ploply Bird - SHOUT to Survive!"
-
-app.index_string = '''<!DOCTYPE html>
-<html lang="fi">
-<head>
-    <meta charset="UTF-8">
-    <title>Ploply Bird - SHOUT to Survive!</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-    
-    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
-    <link rel="shortcut icon" href="/favicon.ico?v=2">
-    
-    <link rel="manifest" href="/assets/manifest.json" />
-    {%metas%}
-    {%css%}
-    <style>body { font-family: 'Ubuntu', 'Segoe UI', sans-serif; } ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; } .fade-in { animation: fadeIn 0.5s; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }</style>
-</head>
-<body>
-    {%app_entry%}
-    <footer>{%config%}{%scripts%}{%renderer%}</footer>
-</body>
-</html>'''
-
 # ==========================================
 # 3. APP LAYOUT
 # ==========================================
 app.layout = dbc.Container([
     
-    # --- HEADER ---
     dbc.Row([
         dbc.Col([
-            html.H1("Ploply Bird 🐦🗣️", className="text-center mt-3 mb-1"),
-            html.P(f"SHOUT to survive! (Mode: {'Local Smooth' if IS_LOCAL else 'Cloud Stable'})", 
-                   className="text-center fw-bold mb-2 text-muted"),
+            html.H1("Ploply 🐣🗣️", className="text-center mt-3 mb-1"),
+            # Ohjetta päivitetty: Hands-free!
+            html.P("1. Click Mic 👉 2. SHOUT to Start!", 
+                   className="text-center fw-bold mb-2 text-primary"),
         ])
     ]),
 
-    # --- CONTROLS: MIC, START, METER ---
+    # START-NAPPI POISTETTU! Jätetty vain mikki ja mittari.
     dbc.Row(className="justify-content-center align-items-center mb-3", children=[
         dbc.Col(width="auto", children=[
             dash_audio_recorder.DashAudioRecorder(
                 id='recorder', visualMode='small', recordMode='click', streamMode=True,
                 echoCancellation=False, noiseSuppression=False, autoGainControl=False
             )
-        ]),
-        dbc.Col(width="auto", children=[
-            dbc.Button("▶ START", id='start-btn', n_clicks=0, color="success", size="lg", className="fw-bold shadow-sm")
         ]),
         dbc.Col(width="auto", children=[
             html.Div([
@@ -104,15 +76,14 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # --- NEW: SENSITIVITY SLIDER ---
     dbc.Row(className="justify-content-center mb-3", children=[
         dbc.Col(width=10, md=6, children=[
-            html.Div("Microphone Sensitivity (Lower = reacts to quiet sounds)", 
+            html.Div("Microphone Sensitivity", 
                      className="text-center text-muted fw-bold", 
                      style={'fontSize': '11px', 'marginBottom': '5px'}),
             dcc.Slider(
                 id='sensitivity-slider',
-                min=5, max=100, step=5, value=40, # 40 on normaali puhelimelle, PC voi vaatia ~15
+                min=5, max=100, step=5, value=40,
                 marks={10: 'PC Mic', 40: 'Mobile', 80: 'Loud'},
                 updatemode='drag',
                 className="p-0"
@@ -120,7 +91,6 @@ app.layout = dbc.Container([
         ])
     ]),
 
-    # --- GAME BOARD ---
     dbc.Row(className="justify-content-center", children=[
         dbc.Col(width="auto", children=[
             html.Div(id='game-board', className="shadow-lg", style={
@@ -136,7 +106,7 @@ app.layout = dbc.Container([
     
     dcc.Store(id='game-state', data={
         'bird_y': 200, 'velocity': 0, 'pipe_x': 400, 'pipe_hole_y': 150, 
-        'score': 0, 'status': 'waiting', 'start_clicks': 0, 'processed_jump': 0 
+        'score': 0, 'status': 'waiting', 'processed_jump': 0 
     }),
     
     dcc.Store(id='last-jump-time', data=0)
@@ -144,18 +114,16 @@ app.layout = dbc.Container([
 ], fluid=True, className="pb-5")
 
 # ==========================================
-# 4. CALLBACK: DYNAMIC VOLUME METER
+# 4. CALLBACK: VOLUME METER
 # ==========================================
 @app.callback(
     Output('meter-fill', 'style'),
     Input('recorder', 'currentVolume'),
-    Input('sensitivity-slider', 'value') # <-- Mittari lukee nyt säätimen arvoa!
+    Input('sensitivity-slider', 'value')
 )
 def update_volume_meter(volume, threshold):
     if volume is None: return {'width': '0%', 'height': '100%', 'backgroundColor': '#198754'}
     pct = min(100, (volume / 128) * 100)
-    
-    # Väri muuttuu punaiseksi heti kun säätimen asettama kynnys (threshold) ylittyy
     color = '#dc3545' if volume > threshold else '#198754'
     return {'width': f'{pct}%', 'height': '100%', 'backgroundColor': color, 'transition': 'width 0.1s ease'}
 
@@ -165,14 +133,13 @@ def update_volume_meter(volume, threshold):
 app.clientside_callback(
     """
     function(volume, threshold, last_time) {
-        // Javascript lukee dynaamisesti liukusäätimen arvon!
         if (!volume || volume < threshold) return window.dash_clientside.no_update; 
         return Date.now() / 1000.0; 
     }
     """,
     Output('last-jump-time', 'data'),
     Input('recorder', 'currentVolume'),
-    State('sensitivity-slider', 'value'), # <-- Säädin välitetään suoraan puhelimen selaimeen
+    State('sensitivity-slider', 'value'),
     State('last-jump-time', 'data')
 )
 
@@ -185,32 +152,44 @@ app.clientside_callback(
     Output('score-display', 'children'),
     Output('game-clock', 'disabled'), 
     Input('game-clock', 'n_intervals'), 
-    Input('start-btn', 'n_clicks'),     
-    State('game-state', 'data'),
-    State('last-jump-time', 'data')
+    Input('last-jump-time', 'data'),  # KRIITTINEN MUUTOS: Huuto on nyt Input, joka herättää pelin!
+    State('game-state', 'data')
 )
-def update_game(n, start_clicks, state, last_jump):
-    if start_clicks is None: start_clicks = 0
-
-    if start_clicks > state.get('start_clicks', 0):
-        state = {
-            'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
-            'pipe_hole_y': random.randint(50, 170), 'score': 0, 
-            'status': 'playing', 'start_clicks': start_clicks,
-            'processed_jump': time.time() 
-        }
-
-    if state['status'] == 'waiting':
-        screen = html.H2("Ready?", className="text-center text-dark", style={'marginTop': '150px'})
-        return state, screen, "Press START!", True 
-
-    if state['status'] == 'game_over':
-        screen = html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '100px'})
-        return state, screen, f"Score: {state['score']} 🏆", True 
-
-    # --- PHYSICS ---
+def update_game(n, last_jump, state):
+    trigger = ctx.triggered_id
     now = time.time()
-    if (now - last_jump < JUMP_COOLDOWN) and (now - state.get('processed_jump', 0) > JUMP_COOLDOWN):
+    
+    # Tarkistetaan, huusiko pelaaja juuri
+    is_shouting = (now - last_jump < 0.50)
+
+    # 1. VALIKKOTILAT: Odotus tai Game Over
+    if state['status'] in ['waiting', 'game_over']:
+        if is_shouting:
+            # Pelaaja huusi! Aloitetaan peli välittömästi.
+            state = {
+                'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
+                'pipe_hole_y': random.randint(50, 170), 'score': 0, 
+                'status': 'playing', 'processed_jump': now 
+            }
+            # Kello menee päälle (Disabled = False) ja koodi jatkuu fysiikkaosioon
+        else:
+            # Pidetään peli valikossa ja kello sammutettuna (Disabled = True)
+            if state['status'] == 'waiting':
+                screen = html.H2("SHOUT TO START!", className="text-center text-primary fw-bold", style={'marginTop': '150px'})
+                return state, screen, "Turn on Mic first!", True 
+            else:
+                screen = html.Div([
+                    html.H1("GAME OVER!", className="text-center text-danger fw-bold", style={'marginTop': '80px'}),
+                    html.H3("SHOUT TO RESTART!", className="text-center text-primary mt-4")
+                ])
+                return state, screen, f"Score: {state['score']} 🏆", True 
+
+    # Estetään pelikellon turhat päivitykset, jos jokin meni vikaan
+    if trigger == 'game-clock' and state['status'] != 'playing':
+        raise PreventUpdate
+
+    # --- PHYSICS (Suoritetaan vain kun peli on käynnissä) ---
+    if is_shouting and (now - state.get('processed_jump', 0) > JUMP_COOLDOWN):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
         
@@ -238,17 +217,14 @@ def update_game(n, start_clicks, state, last_jump):
     rot_multiplier = 4 if IS_LOCAL else 2.5
     rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     
-    # 1. BIRD
     bird = html.Div("🐣", style={
-        'position': 'absolute', 'left': '0px', 'top': '0px', # Nollataan perussijainti
+        'position': 'absolute', 'left': '0px', 'top': '0px',
         'width': f'{bird_size}px', 'height': f'{bird_size}px', 
         'fontSize': '26px', 'textAlign': 'center', 'lineHeight': f'{bird_size}px',
-        # Yhdistetään X-sijainti, Y-sijainti ja kierto samaan tehokkaaseen komentoon:
         'transform': f'translate3d({bird_x}px, {state["bird_y"]}px, 0) rotate({rotation}deg)', 
-        'transition': f'transform {CSS_TRANSITION}' # Animoidaan vain transformia
+        'transition': f'transform {CSS_TRANSITION}'
     })
     
-    # 2. PIPES
     pipe_top = html.Div(style={
         'position': 'absolute', 'left': '0px', 'top': '0px', 
         'width': f'{pipe_width}px', 'height': f"{state['pipe_hole_y']}px", 
@@ -268,4 +244,4 @@ def update_game(n, start_clicks, state, last_jump):
     return state, [bird, pipe_top, pipe_bottom], f"Score: {state['score']}", False
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)

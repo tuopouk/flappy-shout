@@ -35,7 +35,7 @@ python app.py
 
 ## 🎮 How to Play
 1. Allow microphone access in your browser and click the small **Mic icon**.
-2. Click **Start Game**.
+2. SHOUT to **Start Game**.
 3. **Say "PAH!" or shout** to make the bird jump! Control your volume to navigate through the green pipes.
 
 ## 🧠 Powered By

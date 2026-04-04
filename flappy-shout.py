@@ -160,15 +160,23 @@ def update_volume_meter(volume, threshold):
 # ==========================================
 # 5. CALLBACK: CLIENTSIDE VOICE DETECTION
 # ==========================================
-# Runs entirely in the browser to minimize latency. 
-# FIXED: Increments a counter instead of sending a timestamp to prevent clock-sync bugs!
 app.clientside_callback(
     """
     function(volume, threshold, jump_count) {
-        // If volume is too low, do not update the server
+        // 1. If the volume is too low, do nothing
         if (!volume || volume < threshold) return window.dash_clientside.no_update; 
         
-        // Shout detected! Increment the counter to notify the server.
+        // 2. CLIENTSIDE COOLDOWN (NETWORK SAVER)
+        // Check the browser's memory for the exact time of the last shout.
+        let now = Date.now();
+        if (window.last_shout_time && (now - window.last_shout_time < 400)) {
+            // If the last shout was less than 0.4 seconds (400ms) ago,
+            // block the request entirely to prevent network flooding!
+            return window.dash_clientside.no_update; 
+        }
+        window.last_shout_time = now; // Save the timestamp of this valid shout
+        
+        // 3. Permission granted: increment the jump counter and send 1 message to Heroku
         return (jump_count || 0) + 1; 
     }
     """,

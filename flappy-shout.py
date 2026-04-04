@@ -9,9 +9,11 @@ import random
 # ==========================================
 # 1. ENVIRONMENT DETECTION (Local vs. Cloud)
 # ==========================================
+# Check if running on Heroku (PORT exists) or locally
 IS_LOCAL = os.environ.get('PORT') is None
 
 if IS_LOCAL:
+    # 🏎️ LOCAL SETTINGS: Smooth 25 FPS for local testing
     TICK_RATE = 40
     CSS_TRANSITION = '0.04s linear'
     GRAVITY = 1.5         
@@ -19,6 +21,7 @@ if IS_LOCAL:
     PIPE_SPEED = 10       
     JUMP_COOLDOWN = 0.2
 else:
+    # ☁️ CLOUD SETTINGS: Stable 6.6 FPS optimized for mobile networks
     TICK_RATE = 150
     CSS_TRANSITION = '0.15s linear'
     GRAVITY = 4.0         
@@ -26,6 +29,7 @@ else:
     PIPE_SPEED = 20       
     JUMP_COOLDOWN = 0.4
 
+# Standard game dimensions
 HOLE_SIZE = 170       
 
 # ==========================================
@@ -36,18 +40,17 @@ app = Dash(__name__,
            suppress_callback_exceptions=True, 
            title="Ploply Bird - SHOUT to Survive! 🐣🗣️",  
            meta_tags=[
-               # Mobile-friendly meta taggs
+               # Mobile-friendly meta tags to prevent zooming
                {"name": "viewport", "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"},
                
-               # --- OPEN GRAPH TAGS (WhatsApp, Discord, Facebook, iMessage...) ---
+               # --- OPEN GRAPH TAGS (For rich link previews on WhatsApp, Discord, etc.) ---
                {"property": "og:title", "content": "Ploply Bird - SHOUT to Survive! 🐣🗣️"},
                {"property": "og:description", "content": "The voice-controlled mobile game! Click mic, shout to start, and scream to survive."},
                {"property": "og:type", "content": "website"},
                {"property": "og:url", "content": "https://flappy-shout-222acbab9f2c.herokuapp.com/"},
-               
                {"property": "og:image", "content": "https://flappy-shout-222acbab9f2c.herokuapp.com/assets/logo.png"},
                
-               # --- TWITTER Card (X / Twitter) ---
+               # --- TWITTER CARD (For X / Twitter previews) ---
                {"name": "twitter:card", "content": "summary_large_image"},
                {"name": "twitter:title", "content": "Ploply Bird - SHOUT to Survive! 🐣🗣️"},
                {"name": "twitter:description", "content": "The voice-controlled mobile game! Scream to survive."},
@@ -61,6 +64,7 @@ server = app.server
 # ==========================================
 app.layout = dbc.Container([
     
+    # Header Section
     dbc.Row([
         dbc.Col([
             html.H1("Ploply Bird - SHOUT to Survive! 🐣🗣️", className="text-center mt-3 mb-1"),
@@ -69,6 +73,7 @@ app.layout = dbc.Container([
         ])
     ]),
 
+    # Microphone and Volume Meter Section
     dbc.Row(className="justify-content-center align-items-center mb-3", children=[
         dbc.Col(width="auto", children=[
             dash_audio_recorder.DashAudioRecorder(
@@ -92,6 +97,7 @@ app.layout = dbc.Container([
         ])
     ]),
 
+    # Microphone Sensitivity Slider
     dbc.Row(className="justify-content-center mb-3", children=[
         dbc.Col(width=10, md=6, children=[
             html.Div("Microphone Sensitivity", 
@@ -107,6 +113,7 @@ app.layout = dbc.Container([
         ])
     ]),
 
+    # Main Game Canvas
     dbc.Row(className="justify-content-center", children=[
         dbc.Col(width="auto", children=[
             html.Div(id='game-board', className="shadow-lg", style={
@@ -118,14 +125,18 @@ app.layout = dbc.Container([
         ])
     ]),
 
+    # The Game Clock (Interval) - Disabled by default until game starts
     dcc.Interval(id='game-clock', interval=TICK_RATE, n_intervals=0, disabled=True),
     
-    # LISÄTTY: 'death_time' pitää kirjaa kuolinhetkestä
+    # Store for Game State
+    # FIXED: Added 'seen_jump_count' to track shout events safely across network delays
     dcc.Store(id='game-state', data={
         'bird_y': 200, 'velocity': 0, 'pipe_x': 400, 'pipe_hole_y': 150, 
-        'score': 0, 'status': 'waiting', 'processed_jump': 0, 'death_time': 0
+        'score': 0, 'status': 'waiting', 'processed_jump': 0, 'death_time': 0,
+        'seen_jump_count': 0 
     }),
     
+    # Store for Jump Trigger (Now acts as an incremental counter, not a timestamp!)
     dcc.Store(id='last-jump-time', data=0)
 
 ], fluid=True, className="pb-5")
@@ -133,6 +144,7 @@ app.layout = dbc.Container([
 # ==========================================
 # 4. CALLBACK: VOLUME METER
 # ==========================================
+# Updates the green/red volume bar in the UI based on mic input
 @app.callback(
     Output('meter-fill', 'style'),
     Input('recorder', 'currentVolume'),
@@ -141,17 +153,23 @@ app.layout = dbc.Container([
 def update_volume_meter(volume, threshold):
     if volume is None: return {'width': '0%', 'height': '100%', 'backgroundColor': '#198754'}
     pct = min(100, (volume / 128) * 100)
+    # Turn red if volume exceeds user-defined threshold
     color = '#dc3545' if volume > threshold else '#198754'
     return {'width': f'{pct}%', 'height': '100%', 'backgroundColor': color, 'transition': 'width 0.1s ease'}
 
 # ==========================================
 # 5. CALLBACK: CLIENTSIDE VOICE DETECTION
 # ==========================================
+# Runs entirely in the browser to minimize latency. 
+# FIXED: Increments a counter instead of sending a timestamp to prevent clock-sync bugs!
 app.clientside_callback(
     """
-    function(volume, threshold, last_time) {
+    function(volume, threshold, jump_count) {
+        // If volume is too low, do not update the server
         if (!volume || volume < threshold) return window.dash_clientside.no_update; 
-        return Date.now() / 1000.0; 
+        
+        // Shout detected! Increment the counter to notify the server.
+        return (jump_count || 0) + 1; 
     }
     """,
     Output('last-jump-time', 'data'),
@@ -163,6 +181,7 @@ app.clientside_callback(
 # ==========================================
 # 6. CALLBACK: MAIN GAME ENGINE
 # ==========================================
+# Handles physics, collisions, rendering, and game state management
 @app.callback(
     Output('game-state', 'data'),
     Output('game-board', 'children'),
@@ -172,12 +191,22 @@ app.clientside_callback(
     Input('last-jump-time', 'data'),  
     State('game-state', 'data')
 )
-def update_game(n, last_jump, state):
+def update_game(n, jump_count, state):
     trigger = ctx.triggered_id
     now = time.time()
-    is_shouting = (now - last_jump < 0.50)
+    
+    if jump_count is None: jump_count = 0
 
-    # 1. VALIKKOTILAT: Odotus tai Game Over
+    # Check if a new shout was registered (counter increased)
+    is_shouting = (jump_count > state.get('seen_jump_count', 0))
+
+    # Acknowledge the shout so we don't process it twice
+    if is_shouting:
+        state['seen_jump_count'] = jump_count
+
+    # ---------------------------------------------------------
+    # STATE MACHINE: Menus & Game Over Handling
+    # ---------------------------------------------------------
     if state['status'] in ['waiting', 'game_over']:
         can_start = False
         
@@ -185,19 +214,20 @@ def update_game(n, last_jump, state):
             if state['status'] == 'waiting':
                 can_start = True
             elif state['status'] == 'game_over':
-                # RESTART-LOGIIKKA: Varmistetaan, että kuolemasta on kulunut yli 1.0 sekuntia
-                # JA että huuto on tapahtunut kuoleman jälkeen (ei paniikkihuutoa).
+                # Enforce a 1-second cooldown after death to prevent accidental restarts
                 death_time = state.get('death_time', 0)
-                if (now - death_time > 1.0) and (last_jump > death_time):
+                if (now - death_time > 1.0):
                     can_start = True
 
         if can_start:
-            state = {
+            # Initialize a new game
+            state.update({
                 'bird_y': 200, 'velocity': -15, 'pipe_x': 400, 
                 'pipe_hole_y': random.randint(50, 170), 'score': 0, 
                 'status': 'playing', 'processed_jump': now, 'death_time': 0
-            }
+            })
         else:
+            # Render menu screens and keep the game clock disabled
             if state['status'] == 'waiting':
                 screen = html.H2("SHOUT TO START!", className="text-center text-primary fw-bold", style={'marginTop': '150px'})
                 return state, screen, "Turn on Mic first!", True 
@@ -208,41 +238,54 @@ def update_game(n, last_jump, state):
                 ])
                 return state, screen, f"Score: {state['score']} 🏆", True 
 
+    # Prevent unnecessary updates if not playing
     if trigger == 'game-clock' and state['status'] != 'playing':
         raise PreventUpdate
 
-    # --- PHYSICS ---
+    # ---------------------------------------------------------
+    # PHYSICS ENGINE
+    # ---------------------------------------------------------
+    # Apply jump force if player shouted (and cooldown allows it)
     if is_shouting and (now - state.get('processed_jump', 0) > JUMP_COOLDOWN):
         state['velocity'] = JUMP_STRENGTH
         state['processed_jump'] = now 
         
+    # Apply gravity and terminal velocity
     state['velocity'] += GRAVITY
     max_fall = 20 if IS_LOCAL else 30
     if state['velocity'] > max_fall: state['velocity'] = max_fall
         
+    # Update positions
     state['bird_y'] += state['velocity']
     state['pipe_x'] -= PIPE_SPEED
     
+    # Recycle pipes and increase score
     if state['pipe_x'] < -50: 
         state['pipe_x'] = 350 
         state['score'] += 1
         state['pipe_hole_y'] = random.randint(50, 170) 
 
-    # --- COLLISIONS ---
+    # ---------------------------------------------------------
+    # COLLISION DETECTION
+    # ---------------------------------------------------------
     bird_x, bird_size, pipe_width = 50, 30, 50
     collision = False
     
+    # Hit floor or ceiling
     if state['bird_y'] > 370 or state['bird_y'] < 0:
         collision = True
+    # Hit pipes
     elif (state['pipe_x'] < bird_x + bird_size) and (state['pipe_x'] + pipe_width > bird_x):
         if state['bird_y'] < state['pipe_hole_y'] or (state['bird_y'] + bird_size) > (state['pipe_hole_y'] + HOLE_SIZE):
             collision = True
 
     if collision:
         state['status'] = 'game_over'
-        state['death_time'] = now  # <--- TALLENNETAAN KUOLINHETKI
+        state['death_time'] = now  # Record death time for the restart cooldown
 
-    # --- RENDERING ---
+    # ---------------------------------------------------------
+    # RENDERING (GPU Accelerated via translate3d)
+    # ---------------------------------------------------------
     rot_multiplier = 4 if IS_LOCAL else 2.5
     rotation = max(-20, min(90, state['velocity'] * rot_multiplier))
     

@@ -34,9 +34,27 @@ HOLE_SIZE = 170
 app = Dash(__name__, 
            external_stylesheets=[dbc.themes.BOOTSTRAP],
            suppress_callback_exceptions=True, 
-           meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"}])
+           title="Ploply Bird - SHOUT to Survive! 🐣🗣️",  
+           meta_tags=[
+               # Mobile-friendly meta taggs
+               {"name": "viewport", "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"},
+               
+               # --- OPEN GRAPH TAGS (WhatsApp, Discord, Facebook, iMessage...) ---
+               {"property": "og:title", "content": "Ploply Bird - SHOUT to Survive! 🐣🗣️"},
+               {"property": "og:description", "content": "The voice-controlled mobile game! Click mic, shout to start, and scream to survive."},
+               {"property": "og:type", "content": "website"},
+               {"property": "og:url", "content": "https://flappy-shout-222acbab9f2c.herokuapp.com/"},
+               
+               {"property": "og:image", "content": "https://flappy-shout-222acbab9f2c.herokuapp.com/assets/logo.png"},
+               
+               # --- TWITTER Card (X / Twitter) ---
+               {"name": "twitter:card", "content": "summary_large_image"},
+               {"name": "twitter:title", "content": "Ploply Bird - SHOUT to Survive! 🐣🗣️"},
+               {"name": "twitter:description", "content": "The voice-controlled mobile game! Scream to survive."},
+               {"name": "twitter:image", "content": "https://flappy-shout-222acbab9f2c.herokuapp.com/assets/logo.png"}
+           ])
 
-server = app.server 
+server = app.server
 
 # ==========================================
 # 3. APP LAYOUT
@@ -45,7 +63,7 @@ app.layout = dbc.Container([
     
     dbc.Row([
         dbc.Col([
-            html.H1("Ploply 🐣🗣️", className="text-center mt-3 mb-1"),
+            html.H1("Ploply Bird - SHOUT to Survive! 🐣🗣️", className="text-center mt-3 mb-1"),
             html.P("1. Click Mic 👉 2. SHOUT to Start!", 
                    className="text-center fw-bold mb-2 text-primary"),
         ])
